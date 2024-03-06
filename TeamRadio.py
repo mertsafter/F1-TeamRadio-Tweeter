@@ -1,4 +1,3 @@
-import urllib.request as request
 import json
 import requests
 import whisper
@@ -34,56 +33,57 @@ def tweetNextTeamRadio(model):
     logging.info("Starting Team radio check and transcription...")
     
     # Get the latest Session Info of the F1 Session (Race, Quali, Training)
-    with request.urlopen('https://livetiming.formula1.com/static/SessionInfo.json') as response:
-        if response.getcode() == 200:
-            source = response.read()
-            sessionInfo = json.loads(source)
-            
-            logging.info("Session Info successfully retrieved!" + sessionInfo['Meeting']['OfficialName'])
+    
+    response = requests.get('https://livetiming.formula1.com/static/SessionInfo.json')
+    if response.status_code == 200:
+        source = response.content
+        sessionInfo = json.loads(source)
+        
+        logging.info("Session Info successfully retrieved! " + sessionInfo['Meeting']['OfficialName'])
 
-            teamRadiosUrl = "https://livetiming.formula1.com/static/" + \
-                sessionInfo['Path'] + "TeamRadio.json"
-            
-            teamRadioResponse = requests.get(teamRadiosUrl)
-            teamRadioResponse.encoding = 'utf-8-sig'
+        teamRadiosUrl = "https://livetiming.formula1.com/static/" + \
+            sessionInfo['Path'] + "TeamRadio.json"
+        
+        teamRadioResponse = requests.get(teamRadiosUrl)
+        teamRadioResponse.encoding = 'utf-8-sig'
 
-            teamRadioContent = json.loads(teamRadioResponse.text)
-            
-            # Get the latest saved entry to check where to continue
-            latest_entry = getLatestEntry()
+        teamRadioContent = json.loads(teamRadioResponse.text)
+        
+        # Get the latest saved entry to check where to continue
+        latest_entry = getLatestEntry()
 
-            # Set the lastTweet to the latest entry if any otherwise to None
-            if latest_entry is not None and len(latest_entry) >= 4:
-                lastPath = latest_entry[3]
-            else:
-                lastPath = None
-                
-            # Helper variable to determine when to tweet the next entry of the TeamRadioContent
-            next = False
-            
-            for currentTeamRadio in teamRadioContent['Captures']:
-                if lastPath is None or next:
-                    # Prepare whipser model only if tweet will be posted
-                    model = whisper.load_model(model)
-                    
-                    # Get the url to the mp3 of the current team radio entry by the data path
-                    currentTeamRadioUrl = "https://livetiming.formula1.com/static/" + sessionInfo['Path'] + currentTeamRadio['Path']
-                    
-                    # Start the transcription using whisper's model
-                    result = model.transcribe(currentTeamRadioUrl, fp16=False)
-                    
-                    # Tweet
-                    # TODO: Include the https://www.tweepy.org/ library for doing the real tweet on X previously twitter
-                    logging.info("Tweet: " + currentTeamRadio['RacingNumber'] + ": " + result["text"])
-                    saveLatestEntry(currentTeamRadio['RacingNumber'], currentTeamRadio['Utc'], currentTeamRadio['Path'])
-                    break
-
-                # Check if the lastPath has the same Path as the current entry to determine that the next entry should tweet the transcribtion 
-                if lastPath == currentTeamRadio['Path']:
-                    next = True
-                    continue
+        # Set the lastTweet to the latest entry if any otherwise to None
+        if latest_entry is not None and len(latest_entry) >= 4:
+            lastPath = latest_entry[3]
         else:
-            logging.error('Error occurred retrieving Session Info!', response.getcode())
+            lastPath = None
+            
+        # Helper variable to determine when to tweet the next entry of the TeamRadioContent
+        next = False
+        
+        for currentTeamRadio in teamRadioContent['Captures']:
+            if lastPath is None or next:
+                # Prepare whipser model only if tweet will be posted
+                model = whisper.load_model(model)
+                
+                # Get the url to the mp3 of the current team radio entry by the data path
+                currentTeamRadioUrl = "https://livetiming.formula1.com/static/" + sessionInfo['Path'] + currentTeamRadio['Path']
+                
+                # Start the transcription using whisper's model
+                result = model.transcribe(currentTeamRadioUrl, fp16=False)
+                
+                # Tweet
+                # TODO: Include the https://www.tweepy.org/ library for doing the real tweet on X previously twitter
+                logging.info("Tweet: " + currentTeamRadio['RacingNumber'] + ": " + result["text"])
+                saveLatestEntry(currentTeamRadio['RacingNumber'], currentTeamRadio['Utc'], currentTeamRadio['Path'])
+                break
+
+            # Check if the lastPath has the same Path as the current entry to determine that the next entry should tweet the transcribtion 
+            if lastPath == currentTeamRadio['Path']:
+                next = True
+                continue
+    else:
+        logging.error('Error occurred retrieving Session Info!', response.status_code)
 
 
 initDatabase()
